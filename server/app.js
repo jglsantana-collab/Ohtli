@@ -296,7 +296,7 @@ app.get('/api/flights/lookup', auth, asyncRoute(async (req, res) => {
     return res.status(501).json({ error: 'El autocompletado de vuelos no está configurado (falta FLIGHT_API_KEY)' });
   }
   const clean = String(flight_number).replace(/\s+/g, '').toUpperCase();
-  const url = `http://api.aviationstack.com/v1/flights?access_key=${process.env.FLIGHT_API_KEY}&flight_iata=${encodeURIComponent(clean)}`;
+  const url = `https://api.aviationstack.com/v1/flights?access_key=${process.env.FLIGHT_API_KEY}&flight_iata=${encodeURIComponent(clean)}`;
   const apiRes = await fetch(url);
   if (!apiRes.ok) return res.status(502).json({ error: 'No se pudo consultar el vuelo' });
   const data = await apiRes.json();
