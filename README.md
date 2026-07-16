@@ -15,7 +15,7 @@
 
 ## 🚀 Cómo correrla en local
 
-Requisitos: Node.js 18+ y una base de datos Postgres (ej. una gratuita en [Neon](https://neon.tech)).
+Requisitos: Node.js 18+ y un proyecto de Postgres en [Supabase](https://supabase.com) (tiene capa gratuita).
 
 ```bash
 cd ohtli
@@ -39,10 +39,12 @@ npm run start        # compila el frontend y lo sirve desde la API en http://loc
 
 ## ☁️ Despliegue en Vercel
 
-El proyecto ya está configurado para desplegarse completo (frontend + API) en un solo proyecto de Vercel:
+El proyecto ya está configurado para desplegarse completo (frontend + API) en un solo proyecto de Vercel, usando Postgres de Supabase:
 
-1. Crea una base de datos Postgres, por ejemplo con la [integración de Neon en Vercel](https://vercel.com/marketplace/neon) (Storage → Create Database → Neon). Esto agrega automáticamente la variable `DATABASE_URL` al proyecto.
-2. En **Project Settings → Environment Variables**, agrega `JWT_SECRET` con un valor aleatorio propio (por ejemplo generado con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`).
+1. En tu proyecto de Supabase: **Project Settings → Database → Connection string**, pestaña **Transaction pooler** (puerto `6543`, recomendado para funciones serverless). Copia la cadena y sustituye `[YOUR-PASSWORD]` por la contraseña real de la base de datos.
+2. En Vercel: **Project Settings → Environment Variables**, agrega:
+   - `DATABASE_URL` = la cadena que copiaste de Supabase.
+   - `JWT_SECRET` = un valor aleatorio propio (ej. generado con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`).
 3. Vuelve a desplegar (Deployments → ⋯ → Redeploy). `vercel.json` en la raíz ya define el build del frontend (`client/`) y enruta `/api/*` hacia la función serverless en `api/index.js`, que reutiliza el mismo Express de `server/app.js`.
 
 ## 🔑 Clave de Google Maps
@@ -62,7 +64,7 @@ Sin clave, la app sigue funcionando: puedes agregar lugares manualmente, usar el
 ohtli/
 ├── api/
 │   └── index.js     # entrypoint de la función serverless de Vercel (reexporta server/app.js)
-├── server/          # API Express + Postgres (@neondatabase/serverless)
+├── server/          # API Express + Postgres (Supabase, driver "postgres")
 │   ├── app.js        # la app de Express: rutas de auth, viajes, lugares, miembros
 │   ├── index.js       # entrypoint solo para desarrollo local (app.listen)
 │   └── db.js          # conexión y esquema de la base de datos

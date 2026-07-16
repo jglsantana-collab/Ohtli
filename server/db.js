@@ -1,10 +1,15 @@
-import { neon } from '@neondatabase/serverless';
+import postgres from 'postgres';
 
 if (!process.env.DATABASE_URL) {
   throw new Error('Falta la variable de entorno DATABASE_URL (cadena de conexión de Postgres)');
 }
 
-export const sql = neon(process.env.DATABASE_URL);
+// prepare: false es obligatorio con el "Transaction pooler" de Supabase (pgbouncer),
+// que no soporta prepared statements entre invocaciones.
+export const sql = postgres(process.env.DATABASE_URL, {
+  ssl: 'require',
+  prepare: false
+});
 
 export async function initSchema() {
   await sql`
