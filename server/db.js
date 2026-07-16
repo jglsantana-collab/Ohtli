@@ -59,6 +59,29 @@ export async function initSchema() {
       lng DOUBLE PRECISION,
       rating DOUBLE PRECISION,
       planned_date TEXT,
+      planned_time TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      notes TEXT,
+      added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS planned_time TEXT`;
+  await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS flights (
+      id SERIAL PRIMARY KEY,
+      trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      airline TEXT,
+      flight_number TEXT NOT NULL,
+      reservation_code TEXT,
+      origin TEXT,
+      destination TEXT,
+      departure_date TEXT,
+      departure_time TEXT,
+      arrival_date TEXT,
+      arrival_time TEXT,
       notes TEXT,
       added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()

@@ -5,8 +5,10 @@ import PlaceSearch from './PlaceSearch.jsx';
 import CalendarView from './CalendarView.jsx';
 import MapView from './MapView.jsx';
 import ShareView from './ShareView.jsx';
+import DashboardView from './DashboardView.jsx';
 
 const TABS = [
+  { id: 'resumen', label: '🧭 Resumen' },
   { id: 'lugares', label: '📋 Lugares' },
   { id: 'calendario', label: '📅 Calendario' },
   { id: 'mapa', label: '🗺️ Mapa' },
@@ -22,7 +24,7 @@ function fmtDate(d) {
 export default function TripView({ tripId, user, mapsReady, onBack, onNeedKey }) {
   const [trip, setTrip] = useState(null);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState('lugares');
+  const [tab, setTab] = useState('resumen');
   const [showSearch, setShowSearch] = useState(false);
 
   const reload = useCallback(() => {
@@ -75,6 +77,9 @@ export default function TripView({ tripId, user, mapsReady, onBack, onNeedKey })
         ))}
       </nav>
 
+      {tab === 'resumen' && (
+        <DashboardView trip={trip} onChanged={reload} onGoCalendar={() => setTab('calendario')} />
+      )}
       {tab === 'lugares' && (
         <PlacesList trip={trip} onChanged={reload} onAdd={() => setShowSearch(true)} />
       )}

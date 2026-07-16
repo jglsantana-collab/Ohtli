@@ -42,6 +42,13 @@ export const api = {
   updatePlace: (id, body) => request(`/api/places/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deletePlace: (id) => request(`/api/places/${id}`, { method: 'DELETE' }),
 
+  addFlight: (tripId, body) =>
+    request(`/api/trips/${tripId}/flights`, { method: 'POST', body: JSON.stringify(body) }),
+  updateFlight: (id, body) => request(`/api/flights/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteFlight: (id) => request(`/api/flights/${id}`, { method: 'DELETE' }),
+  lookupFlight: (flightNumber) =>
+    request(`/api/flights/lookup?flight_number=${encodeURIComponent(flightNumber)}`),
+
   adminUsers: () => request('/api/admin/users'),
   adminSetPassword: (id, password) =>
     request(`/api/admin/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),

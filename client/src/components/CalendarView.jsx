@@ -2,18 +2,38 @@ import React, { useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { categoryById } from '../categories.js';
 
-const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const WEEKDAYS_LONG = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
+function parseISO(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d, 12);
+}
 const toISO = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// Calendario mensual: muestra los lugares en su fecha planeada y permite
-// asignar fecha a los pendientes con arrastrar-o-clic.
+function buildDayRange(start, end) {
+  if (!start || !end) return [];
+  const out = [];
+  const d = parseISO(start);
+  const last = parseISO(end);
+  while (d <= last) {
+    out.push(new Date(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+// Calendario por días del viaje: cada día es una columna grande donde los
+// lugares se arrastran (drag & drop) y se ordenan por la hora que se les da.
 export default function CalendarView({ trip, onChanged }) {
-  const initial = trip.start_date ? new Date(trip.start_date + 'T12:00:00') : new Date();
-  const [cursor, setCursor] = useState(new Date(initial.getFullYear(), initial.getMonth(), 1));
   const [selectedPlace, setSelectedPlace] = useState(null);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverDay, setDragOverDay] = useState(null);
+  const [savingDates, setSavingDates] = useState(false);
+  const [dateForm, setDateForm] = useState({ start_date: trip.start_date || '', end_date: trip.end_date || '' });
+
+  const days = useMemo(() => buildDayRange(trip.start_date, trip.end_date), [trip.start_date, trip.end_date]);
 
   const byDate = useMemo(() => {
     const map = {};
@@ -25,34 +45,25 @@ export default function CalendarView({ trip, onChanged }) {
   }, [trip.places]);
 
   const unscheduled = trip.places.filter((p) => !p.planned_date);
+  const todayISO = toISO(new Date());
 
-  const weeks = useMemo(() => {
-    const first = new Date(cursor);
-    const startOffset = (first.getDay() + 6) % 7; // lunes = 0
-    const gridStart = new Date(first);
-    gridStart.setDate(first.getDate() - startOffset);
-    const out = [];
-    const d = new Date(gridStart);
-    for (let w = 0; w < 6; w++) {
-      const row = [];
-      for (let i = 0; i < 7; i++) {
-        row.push(new Date(d));
-        d.setDate(d.getDate() + 1);
-      }
-      out.push(row);
-      if (d.getMonth() !== cursor.getMonth() && d > new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0)) break;
-    }
-    return out;
-  }, [cursor]);
-
-  const inTripRange = (iso) => {
-    if (!trip.start_date && !trip.end_date) return false;
-    return (!trip.start_date || iso >= trip.start_date) && (!trip.end_date || iso <= trip.end_date);
-  };
-
-  async function assignDate(place, iso) {
+  async function saveDates(e) {
+    e.preventDefault();
+    if (!dateForm.start_date || !dateForm.end_date) return;
+    setSavingDates(true);
     try {
-      await api.updatePlace(place.id, { planned_date: iso, notes: place.notes });
+      await api.updateTrip(trip.id, dateForm);
+      onChanged();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSavingDates(false);
+    }
+  }
+
+  async function assignDate(placeId, iso, extra = {}) {
+    try {
+      await api.updatePlace(placeId, { planned_date: iso, ...extra });
       setSelectedPlace(null);
       onChanged();
     } catch (err) {
@@ -62,23 +73,109 @@ export default function CalendarView({ trip, onChanged }) {
 
   async function clearDate(place) {
     try {
-      await api.updatePlace(place.id, { planned_date: null, notes: place.notes });
+      await api.updatePlace(place.id, { planned_date: null, planned_time: null });
       onChanged();
     } catch (err) {
       alert(err.message);
     }
   }
 
-  const todayISO = toISO(new Date());
+  async function updateTime(place, value) {
+    try {
+      await api.updatePlace(place.id, { planned_time: value || null });
+      onChanged();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  function appendToDay(placeId, iso) {
+    const dayItems = byDate[iso] || [];
+    const maxOrder = dayItems.reduce((m, p) => Math.max(m, p.sort_order || 0), 0);
+    return assignDate(placeId, iso, { sort_order: maxOrder + 1 });
+  }
+
+  async function insertBefore(placeId, target) {
+    if (placeId === target.id) return;
+    const iso = target.planned_date;
+    const moving = trip.places.find((p) => p.id === placeId);
+    if (!moving) return;
+    const rest = (byDate[iso] || []).filter((p) => p.id !== placeId);
+    const idx = rest.findIndex((p) => p.id === target.id);
+    rest.splice(idx, 0, moving);
+    try {
+      await Promise.all(rest.map((p, i) =>
+        api.updatePlace(p.id, { planned_date: iso, sort_order: i, planned_time: p.id === placeId ? (moving.planned_time || null) : p.planned_time })
+      ));
+      onChanged();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  function handleDragStart(e, place) {
+    setDraggingId(place.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(place.id));
+  }
+  function handleDragEnd() {
+    setDraggingId(null);
+    setDragOverDay(null);
+  }
+  function handleDayDragOver(e, iso) {
+    e.preventDefault();
+    setDragOverDay(iso);
+  }
+  function handleDayDrop(e, iso) {
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData('text/plain')) || draggingId;
+    setDragOverDay(null);
+    if (id) appendToDay(id, iso);
+  }
+  function handleItemDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  function handleItemDrop(e, place) {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = Number(e.dataTransfer.getData('text/plain')) || draggingId;
+    setDragOverDay(null);
+    if (id) insertBefore(id, place);
+  }
+
+  if (!trip.start_date || !trip.end_date) {
+    return (
+      <div className="calendar-wrap">
+        <div className="empty-state glass">
+          <span className="empty-emoji">🗓️</span>
+          <h3>Define las fechas de tu viaje</h3>
+          <p>Para acomodar horarios día por día primero necesitas la fecha de inicio y fin.</p>
+          <form className="trip-dates-form" onSubmit={saveDates}>
+            <label>
+              Inicio
+              <input type="date" value={dateForm.start_date} onChange={(e) => setDateForm((f) => ({ ...f, start_date: e.target.value }))} required />
+            </label>
+            <label>
+              Fin
+              <input type="date" value={dateForm.end_date} min={dateForm.start_date || undefined} onChange={(e) => setDateForm((f) => ({ ...f, end_date: e.target.value }))} required />
+            </label>
+            <button className="btn btn-primary" disabled={savingDates}>{savingDates ? 'Guardando…' : 'Guardar fechas'}</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="calendar-wrap">
       {unscheduled.length > 0 && (
         <div className="unscheduled glass">
           <p className="unscheduled-title">
-            🕓 Sin fecha ({unscheduled.length}) — {selectedPlace
-              ? <>ahora haz clic en un día para agendar <strong>{selectedPlace.name}</strong> <button className="link" onClick={() => setSelectedPlace(null)}>cancelar</button></>
-              : 'elige uno y luego un día del calendario'}
+            🕓 Sin agendar ({unscheduled.length}) — arrastra un lugar a un día, o
+            {selectedPlace
+              ? <> haz clic en un día para agendar <strong>{selectedPlace.name}</strong> <button className="link" onClick={() => setSelectedPlace(null)}>cancelar</button></>
+              : ' selecciona uno y luego haz clic en un día'}
           </p>
           <div className="chip-row">
             {unscheduled.map((p) => {
@@ -86,6 +183,9 @@ export default function CalendarView({ trip, onChanged }) {
               return (
                 <button
                   key={p.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, p)}
+                  onDragEnd={handleDragEnd}
                   className={`chip ${selectedPlace?.id === p.id ? 'active' : ''}`}
                   onClick={() => setSelectedPlace(selectedPlace?.id === p.id ? null : p)}
                 >
@@ -97,60 +197,76 @@ export default function CalendarView({ trip, onChanged }) {
         </div>
       )}
 
-      <div className="calendar glass">
-        <div className="cal-head">
-          <button className="btn-icon" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>‹</button>
-          <h3>{MONTHS[cursor.getMonth()]} {cursor.getFullYear()}</h3>
-          <button className="btn-icon" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>›</button>
-        </div>
-        <div className="cal-grid cal-weekdays">
-          {WEEKDAYS.map((d, i) => <div key={i} className="cal-weekday">{d}</div>)}
-        </div>
-        {weeks.map((week, wi) => (
-          <div className="cal-grid" key={wi}>
-            {week.map((day) => {
-              const iso = toISO(day);
-              const inMonth = day.getMonth() === cursor.getMonth();
-              const items = byDate[iso] || [];
-              return (
-                <div
-                  key={iso}
-                  className={[
-                    'cal-cell',
-                    inMonth ? '' : 'out',
-                    inTripRange(iso) ? 'in-trip' : '',
-                    iso === todayISO ? 'today' : '',
-                    selectedPlace ? 'assignable' : ''
-                  ].join(' ')}
-                  onClick={() => selectedPlace && assignDate(selectedPlace, iso)}
-                  title={selectedPlace ? `Agendar "${selectedPlace.name}" el ${iso}` : undefined}
-                >
-                  <span className="cal-daynum">{day.getDate()}</span>
-                  <div className="cal-items">
-                    {items.map((p) => {
-                      const cat = categoryById(p.category);
-                      return (
-                        <div
-                          key={p.id}
-                          className="cal-item"
-                          style={{ borderColor: cat.color }}
-                          title={`${p.name} — clic para quitar fecha`}
-                          onClick={(e) => { e.stopPropagation(); if (confirm(`¿Quitar la fecha de "${p.name}"?`)) clearDate(p); }}
-                        >
-                          <span>{cat.emoji}</span> <span className="cal-item-name">{p.name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+      <div className="day-columns">
+        {days.map((day) => {
+          const iso = toISO(day);
+          const items = byDate[iso] || [];
+          const dayIndex = days.findIndex((d) => toISO(d) === iso) + 1;
+          return (
+            <div
+              key={iso}
+              className={[
+                'day-card glass',
+                iso === todayISO ? 'today' : '',
+                dragOverDay === iso ? 'drag-over' : '',
+                selectedPlace ? 'assignable' : ''
+              ].join(' ')}
+              onDragOver={(e) => handleDayDragOver(e, iso)}
+              onDragLeave={() => setDragOverDay((d) => (d === iso ? null : d))}
+              onDrop={(e) => handleDayDrop(e, iso)}
+              onClick={() => selectedPlace && appendToDay(selectedPlace.id, iso)}
+            >
+              <div className="day-card-head">
+                <span className="day-card-badge">Día {dayIndex}</span>
+                <div>
+                  <h3>{WEEKDAYS_LONG[day.getDay()]}</h3>
+                  <p className="muted">{day.getDate()} {MONTHS_SHORT[day.getMonth()]}</p>
                 </div>
-              );
-            })}
-          </div>
-        ))}
-        <p className="cal-legend muted">
-          Las celdas resaltadas son los días de tu viaje. Haz clic en un lugar agendado para quitarle la fecha.
-        </p>
+              </div>
+
+              <div className="day-card-body">
+                {items.length === 0 && (
+                  <p className="day-empty muted">Arrastra lugares aquí</p>
+                )}
+                {items.map((p) => {
+                  const cat = categoryById(p.category);
+                  return (
+                    <div
+                      key={p.id}
+                      className={`day-item ${draggingId === p.id ? 'dragging' : ''}`}
+                      style={{ borderColor: cat.color }}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, p)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={handleItemDragOver}
+                      onDrop={(e) => handleItemDrop(e, p)}
+                    >
+                      <span className="day-item-handle">⋮⋮</span>
+                      <input
+                        type="time"
+                        className="day-item-time"
+                        value={p.planned_time || ''}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => updateTime(p, e.target.value)}
+                      />
+                      <span className="day-item-emoji">{cat.emoji}</span>
+                      <span className="day-item-name">{p.name}</span>
+                      <button
+                        className="btn-icon day-item-remove"
+                        title="Quitar del día"
+                        onClick={(e) => { e.stopPropagation(); clearDate(p); }}
+                      >✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
+      <p className="cal-legend muted">
+        Arrastra un lugar entre días para moverlo, o suéltalo sobre otro lugar para reordenar. Ponle hora con el reloj de cada tarjeta.
+      </p>
     </div>
   );
 }

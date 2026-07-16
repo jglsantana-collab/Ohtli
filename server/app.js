@@ -79,10 +79,15 @@ async function tripWithDetails(trip) {
     SELECT p.*, u.name AS added_by_name
     FROM places p LEFT JOIN users u ON u.id = p.added_by
     WHERE p.trip_id = ${trip.id}
-    ORDER BY p.planned_date IS NULL, p.planned_date, p.created_at
+    ORDER BY p.planned_date IS NULL, p.planned_date, p.planned_time IS NULL, p.planned_time, p.sort_order, p.created_at
   `;
 
-  return { ...trip, members, places };
+  const flights = await sql`
+    SELECT * FROM flights WHERE trip_id = ${trip.id}
+    ORDER BY departure_date IS NULL, departure_date, departure_time IS NULL, departure_time, created_at
+  `;
+
+  return { ...trip, members, places, flights };
 }
 
 function asyncRoute(handler) {
@@ -237,16 +242,16 @@ app.delete('/api/trips/:id/members/:userId', auth, asyncRoute(async (req, res) =
 app.post('/api/trips/:id/places', auth, asyncRoute(async (req, res) => {
   const trip = await getTripForMember(req.params.id, req.user.id);
   if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
-  const { name, category, google_place_id, address, lat, lng, rating, planned_date, notes } = req.body || {};
+  const { name, category, google_place_id, address, lat, lng, rating, planned_date, planned_time, notes } = req.body || {};
   if (!name) return res.status(400).json({ error: 'El nombre del lugar es obligatorio' });
   const cat = CATEGORIES.includes(category) ? category : 'otro';
 
   const [place] = await sql`
-    INSERT INTO places (trip_id, name, category, google_place_id, address, lat, lng, rating, planned_date, notes, added_by)
+    INSERT INTO places (trip_id, name, category, google_place_id, address, lat, lng, rating, planned_date, planned_time, notes, added_by)
     VALUES (
       ${trip.id}, ${name.trim()}, ${cat}, ${google_place_id || null}, ${address || null},
       ${typeof lat === 'number' ? lat : null}, ${typeof lng === 'number' ? lng : null},
-      ${typeof rating === 'number' ? rating : null}, ${planned_date || null}, ${notes || null}, ${req.user.id}
+      ${typeof rating === 'number' ? rating : null}, ${planned_date || null}, ${planned_time || null}, ${notes || null}, ${req.user.id}
     )
     RETURNING *
   `;
@@ -258,12 +263,14 @@ app.put('/api/places/:id', auth, asyncRoute(async (req, res) => {
   if (!place || !(await getTripForMember(place.trip_id, req.user.id))) {
     return res.status(404).json({ error: 'Lugar no encontrado' });
   }
-  const { name, category, planned_date, notes } = req.body || {};
+  const { name, category, planned_date, planned_time, sort_order, notes } = req.body || {};
   const [updated] = await sql`
     UPDATE places SET
       name = COALESCE(${name ?? null}, name),
       category = COALESCE(${category && CATEGORIES.includes(category) ? category : null}, category),
       planned_date = ${planned_date !== undefined ? planned_date : place.planned_date},
+      planned_time = ${planned_time !== undefined ? planned_time : place.planned_time},
+      sort_order = ${sort_order !== undefined ? sort_order : place.sort_order},
       notes = ${notes !== undefined ? notes : place.notes}
     WHERE id = ${place.id}
     RETURNING *
@@ -277,6 +284,99 @@ app.delete('/api/places/:id', auth, asyncRoute(async (req, res) => {
     return res.status(404).json({ error: 'Lugar no encontrado' });
   }
   await sql`DELETE FROM places WHERE id = ${place.id}`;
+  res.json({ ok: true });
+}));
+
+// ---------- Vuelos ----------
+
+app.get('/api/flights/lookup', auth, asyncRoute(async (req, res) => {
+  const { flight_number } = req.query;
+  if (!flight_number) return res.status(400).json({ error: 'Falta el número de vuelo' });
+  if (!process.env.FLIGHT_API_KEY) {
+    return res.status(501).json({ error: 'El autocompletado de vuelos no está configurado (falta FLIGHT_API_KEY)' });
+  }
+  const clean = String(flight_number).replace(/\s+/g, '').toUpperCase();
+  const url = `http://api.aviationstack.com/v1/flights?access_key=${process.env.FLIGHT_API_KEY}&flight_iata=${encodeURIComponent(clean)}`;
+  const apiRes = await fetch(url);
+  if (!apiRes.ok) return res.status(502).json({ error: 'No se pudo consultar el vuelo' });
+  const data = await apiRes.json();
+  if (data?.error) return res.status(502).json({ error: data.error.message || 'No se pudo consultar el vuelo' });
+  const match = data?.data?.[0];
+  if (!match) return res.status(404).json({ error: `No se encontró información para el vuelo ${clean}` });
+
+  function splitDateTime(iso) {
+    if (!iso) return { date: null, time: null };
+    const [date, rest] = iso.split('T');
+    return { date, time: rest ? rest.slice(0, 5) : null };
+  }
+  const dep = splitDateTime(match.departure?.scheduled);
+  const arr = splitDateTime(match.arrival?.scheduled);
+
+  res.json({
+    flight: {
+      airline: match.airline?.name || null,
+      flight_number: match.flight?.iata || clean,
+      origin: match.departure?.airport || match.departure?.iata || null,
+      destination: match.arrival?.airport || match.arrival?.iata || null,
+      departure_date: dep.date,
+      departure_time: dep.time,
+      arrival_date: arr.date,
+      arrival_time: arr.time
+    }
+  });
+}));
+
+app.post('/api/trips/:id/flights', auth, asyncRoute(async (req, res) => {
+  const trip = await getTripForMember(req.params.id, req.user.id);
+  if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
+  const { airline, flight_number, reservation_code, origin, destination, departure_date, departure_time, arrival_date, arrival_time, notes } = req.body || {};
+  if (!flight_number) return res.status(400).json({ error: 'El número de vuelo es obligatorio' });
+
+  const [flight] = await sql`
+    INSERT INTO flights (
+      trip_id, airline, flight_number, reservation_code, origin, destination,
+      departure_date, departure_time, arrival_date, arrival_time, notes, added_by
+    )
+    VALUES (
+      ${trip.id}, ${airline || null}, ${flight_number.trim().toUpperCase()}, ${reservation_code || null},
+      ${origin || null}, ${destination || null}, ${departure_date || null}, ${departure_time || null},
+      ${arrival_date || null}, ${arrival_time || null}, ${notes || null}, ${req.user.id}
+    )
+    RETURNING *
+  `;
+  res.status(201).json({ flight });
+}));
+
+app.put('/api/flights/:id', auth, asyncRoute(async (req, res) => {
+  const [flight] = await sql`SELECT * FROM flights WHERE id = ${req.params.id}`;
+  if (!flight || !(await getTripForMember(flight.trip_id, req.user.id))) {
+    return res.status(404).json({ error: 'Vuelo no encontrado' });
+  }
+  const { airline, flight_number, reservation_code, origin, destination, departure_date, departure_time, arrival_date, arrival_time, notes } = req.body || {};
+  const [updated] = await sql`
+    UPDATE flights SET
+      airline = ${airline !== undefined ? airline : flight.airline},
+      flight_number = ${flight_number ? flight_number.trim().toUpperCase() : flight.flight_number},
+      reservation_code = ${reservation_code !== undefined ? reservation_code : flight.reservation_code},
+      origin = ${origin !== undefined ? origin : flight.origin},
+      destination = ${destination !== undefined ? destination : flight.destination},
+      departure_date = ${departure_date !== undefined ? departure_date : flight.departure_date},
+      departure_time = ${departure_time !== undefined ? departure_time : flight.departure_time},
+      arrival_date = ${arrival_date !== undefined ? arrival_date : flight.arrival_date},
+      arrival_time = ${arrival_time !== undefined ? arrival_time : flight.arrival_time},
+      notes = ${notes !== undefined ? notes : flight.notes}
+    WHERE id = ${flight.id}
+    RETURNING *
+  `;
+  res.json({ flight: updated });
+}));
+
+app.delete('/api/flights/:id', auth, asyncRoute(async (req, res) => {
+  const [flight] = await sql`SELECT * FROM flights WHERE id = ${req.params.id}`;
+  if (!flight || !(await getTripForMember(flight.trip_id, req.user.id))) {
+    return res.status(404).json({ error: 'Vuelo no encontrado' });
+  }
+  await sql`DELETE FROM flights WHERE id = ${flight.id}`;
   res.json({ ok: true });
 }));
 
