@@ -35,16 +35,31 @@ export default function CalendarView({ trip, onChanged }) {
 
   const days = useMemo(() => buildDayRange(trip.start_date, trip.end_date), [trip.start_date, trip.end_date]);
 
+  const schedulable = trip.places.filter((p) => p.category !== 'hotel');
+  const hotels = trip.places.filter((p) => p.category === 'hotel' && p.checkin_date && p.checkout_date);
+
   const byDate = useMemo(() => {
     const map = {};
-    for (const p of trip.places) {
+    for (const p of schedulable) {
       if (!p.planned_date) continue;
       (map[p.planned_date] ||= []).push(p);
     }
     return map;
-  }, [trip.places]);
+  }, [schedulable]);
 
-  const unscheduled = trip.places.filter((p) => !p.planned_date);
+  const hotelsByDate = useMemo(() => {
+    const map = {};
+    for (const h of hotels) {
+      for (const day of buildDayRange(h.checkin_date, h.checkout_date)) {
+        const iso = toISO(day);
+        if (iso === h.checkout_date) continue; // la noche de checkout ya no se hospeda ahí
+        (map[iso] ||= []).push(h);
+      }
+    }
+    return map;
+  }, [hotels]);
+
+  const unscheduled = schedulable.filter((p) => !p.planned_date);
   const todayISO = toISO(new Date());
 
   async function saveDates(e) {
@@ -223,6 +238,12 @@ export default function CalendarView({ trip, onChanged }) {
                   <p className="muted">{day.getDate()} {MONTHS_SHORT[day.getMonth()]}</p>
                 </div>
               </div>
+
+              {(hotelsByDate[iso] || []).map((h) => (
+                <div key={h.id} className="day-hotel-banner">
+                  🏨 Te hospedas en <strong>{h.name}</strong>
+                </div>
+              ))}
 
               <div className="day-card-body">
                 {items.length === 0 && (

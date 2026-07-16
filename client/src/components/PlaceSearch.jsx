@@ -13,7 +13,7 @@ export default function PlaceSearch({ trip, mapsReady, onNeedKey, onClose, onAdd
   const [addingId, setAddingId] = useState(null);
   const [addedIds, setAddedIds] = useState(new Set());
   const [manual, setManual] = useState(!getMapsKey());
-  const [manualForm, setManualForm] = useState({ name: '', category: 'restaurante', planned_date: '', notes: '' });
+  const [manualForm, setManualForm] = useState({ name: '', category: 'restaurante', planned_date: '', checkin_date: '', checkout_date: '', notes: '' });
 
   async function doSearch(e) {
     e?.preventDefault();
@@ -60,7 +60,9 @@ export default function PlaceSearch({ trip, mapsReady, onNeedKey, onClose, onAdd
       await api.addPlace(trip.id, {
         name: manualForm.name,
         category: manualForm.category,
-        planned_date: manualForm.planned_date || null,
+        planned_date: manualForm.category === 'hotel' ? null : (manualForm.planned_date || null),
+        checkin_date: manualForm.category === 'hotel' ? (manualForm.checkin_date || null) : null,
+        checkout_date: manualForm.category === 'hotel' ? (manualForm.checkout_date || null) : null,
         notes: manualForm.notes || null
       });
       onAdded();
@@ -152,16 +154,41 @@ export default function PlaceSearch({ trip, mapsReady, onNeedKey, onClose, onAdd
                 ))}
               </select>
             </label>
-            <label>
-              Fecha planeada (opcional)
-              <input
-                type="date"
-                value={manualForm.planned_date}
-                min={trip.start_date || undefined}
-                max={trip.end_date || undefined}
-                onChange={(e) => setManualForm((f) => ({ ...f, planned_date: e.target.value }))}
-              />
-            </label>
+            {manualForm.category === 'hotel' ? (
+              <div className="form-row">
+                <label>
+                  Check-in
+                  <input
+                    type="date"
+                    value={manualForm.checkin_date}
+                    min={trip.start_date || undefined}
+                    max={trip.end_date || undefined}
+                    onChange={(e) => setManualForm((f) => ({ ...f, checkin_date: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  Check-out
+                  <input
+                    type="date"
+                    value={manualForm.checkout_date}
+                    min={manualForm.checkin_date || trip.start_date || undefined}
+                    max={trip.end_date || undefined}
+                    onChange={(e) => setManualForm((f) => ({ ...f, checkout_date: e.target.value }))}
+                  />
+                </label>
+              </div>
+            ) : (
+              <label>
+                Fecha planeada (opcional)
+                <input
+                  type="date"
+                  value={manualForm.planned_date}
+                  min={trip.start_date || undefined}
+                  max={trip.end_date || undefined}
+                  onChange={(e) => setManualForm((f) => ({ ...f, planned_date: e.target.value }))}
+                />
+              </label>
+            )}
             <label>
               Notas (opcional)
               <textarea

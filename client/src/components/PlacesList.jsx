@@ -78,16 +78,21 @@ function PlaceRow({ place, trip, editing, onEdit, onChanged }) {
   const [form, setForm] = useState({
     category: place.category,
     planned_date: place.planned_date || '',
+    checkin_date: place.checkin_date || '',
+    checkout_date: place.checkout_date || '',
     notes: place.notes || ''
   });
   const [busy, setBusy] = useState(false);
+  const isHotel = form.category === 'hotel';
 
   async function save() {
     setBusy(true);
     try {
       await api.updatePlace(place.id, {
         category: form.category,
-        planned_date: form.planned_date || null,
+        planned_date: isHotel ? null : (form.planned_date || null),
+        checkin_date: isHotel ? (form.checkin_date || null) : null,
+        checkout_date: isHotel ? (form.checkout_date || null) : null,
         notes: form.notes || null
       });
       onChanged();
@@ -120,9 +125,13 @@ function PlaceRow({ place, trip, editing, onEdit, onChanged }) {
           </div>
           {place.address && <div className="place-address">{place.address}</div>}
           <div className="place-tags">
-            {place.planned_date
-              ? <span className="tag tag-date">📅 {fmtDate(place.planned_date)}</span>
-              : <span className="tag tag-nodate">Sin fecha</span>}
+            {place.category === 'hotel'
+              ? (place.checkin_date
+                  ? <span className="tag tag-date">🏨 {fmtDate(place.checkin_date)} → {place.checkout_date ? fmtDate(place.checkout_date) : '¿?'}</span>
+                  : <span className="tag tag-nodate">Sin fechas de estancia</span>)
+              : (place.planned_date
+                  ? <span className="tag tag-date">📅 {fmtDate(place.planned_date)}</span>
+                  : <span className="tag tag-nodate">Sin fecha</span>)}
             {place.notes && <span className="tag">📝 {place.notes}</span>}
             {place.added_by_name && <span className="tag tag-by">Agregó: {place.added_by_name}</span>}
           </div>
@@ -138,16 +147,41 @@ function PlaceRow({ place, trip, editing, onEdit, onChanged }) {
               {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
             </select>
           </label>
-          <label>
-            Fecha planeada
-            <input
-              type="date"
-              value={form.planned_date}
-              min={trip.start_date || undefined}
-              max={trip.end_date || undefined}
-              onChange={(e) => setForm((f) => ({ ...f, planned_date: e.target.value }))}
-            />
-          </label>
+          {isHotel ? (
+            <>
+              <label>
+                Check-in
+                <input
+                  type="date"
+                  value={form.checkin_date}
+                  min={trip.start_date || undefined}
+                  max={trip.end_date || undefined}
+                  onChange={(e) => setForm((f) => ({ ...f, checkin_date: e.target.value }))}
+                />
+              </label>
+              <label>
+                Check-out
+                <input
+                  type="date"
+                  value={form.checkout_date}
+                  min={form.checkin_date || trip.start_date || undefined}
+                  max={trip.end_date || undefined}
+                  onChange={(e) => setForm((f) => ({ ...f, checkout_date: e.target.value }))}
+                />
+              </label>
+            </>
+          ) : (
+            <label>
+              Fecha planeada
+              <input
+                type="date"
+                value={form.planned_date}
+                min={trip.start_date || undefined}
+                max={trip.end_date || undefined}
+                onChange={(e) => setForm((f) => ({ ...f, planned_date: e.target.value }))}
+              />
+            </label>
+          )}
           <label className="grow">
             Notas
             <input

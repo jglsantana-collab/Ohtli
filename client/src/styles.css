@@ -459,6 +459,12 @@ select option { background: #0f172a; }
 .day-card-head h3 { font-size: 1.1rem; text-transform: capitalize; }
 .day-card-head p { font-size: 0.85rem; }
 
+.day-hotel-banner {
+  background: rgba(99, 102, 241, 0.16); border: 1px solid rgba(99, 102, 241, 0.4);
+  color: #c7d2fe; border-radius: 12px; padding: 0.5rem 0.8rem;
+  font-size: 0.88rem; margin-bottom: 0.6rem;
+}
+
 .day-card-body { display: flex; flex-direction: column; gap: 0.5rem; min-height: 3rem; }
 .day-empty { text-align: center; padding: 0.8rem; font-size: 0.85rem; }
 

@@ -242,16 +242,17 @@ app.delete('/api/trips/:id/members/:userId', auth, asyncRoute(async (req, res) =
 app.post('/api/trips/:id/places', auth, asyncRoute(async (req, res) => {
   const trip = await getTripForMember(req.params.id, req.user.id);
   if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
-  const { name, category, google_place_id, address, lat, lng, rating, planned_date, planned_time, notes } = req.body || {};
+  const { name, category, google_place_id, address, lat, lng, rating, planned_date, planned_time, checkin_date, checkout_date, notes } = req.body || {};
   if (!name) return res.status(400).json({ error: 'El nombre del lugar es obligatorio' });
   const cat = CATEGORIES.includes(category) ? category : 'otro';
 
   const [place] = await sql`
-    INSERT INTO places (trip_id, name, category, google_place_id, address, lat, lng, rating, planned_date, planned_time, notes, added_by)
+    INSERT INTO places (trip_id, name, category, google_place_id, address, lat, lng, rating, planned_date, planned_time, checkin_date, checkout_date, notes, added_by)
     VALUES (
       ${trip.id}, ${name.trim()}, ${cat}, ${google_place_id || null}, ${address || null},
       ${typeof lat === 'number' ? lat : null}, ${typeof lng === 'number' ? lng : null},
-      ${typeof rating === 'number' ? rating : null}, ${planned_date || null}, ${planned_time || null}, ${notes || null}, ${req.user.id}
+      ${typeof rating === 'number' ? rating : null}, ${planned_date || null}, ${planned_time || null},
+      ${checkin_date || null}, ${checkout_date || null}, ${notes || null}, ${req.user.id}
     )
     RETURNING *
   `;
@@ -263,7 +264,7 @@ app.put('/api/places/:id', auth, asyncRoute(async (req, res) => {
   if (!place || !(await getTripForMember(place.trip_id, req.user.id))) {
     return res.status(404).json({ error: 'Lugar no encontrado' });
   }
-  const { name, category, planned_date, planned_time, sort_order, notes } = req.body || {};
+  const { name, category, planned_date, planned_time, sort_order, checkin_date, checkout_date, notes } = req.body || {};
   const [updated] = await sql`
     UPDATE places SET
       name = COALESCE(${name ?? null}, name),
@@ -271,6 +272,8 @@ app.put('/api/places/:id', auth, asyncRoute(async (req, res) => {
       planned_date = ${planned_date !== undefined ? planned_date : place.planned_date},
       planned_time = ${planned_time !== undefined ? planned_time : place.planned_time},
       sort_order = ${sort_order !== undefined ? sort_order : place.sort_order},
+      checkin_date = ${checkin_date !== undefined ? checkin_date : place.checkin_date},
+      checkout_date = ${checkout_date !== undefined ? checkout_date : place.checkout_date},
       notes = ${notes !== undefined ? notes : place.notes}
     WHERE id = ${place.id}
     RETURNING *
