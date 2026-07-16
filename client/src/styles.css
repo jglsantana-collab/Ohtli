@@ -504,14 +504,33 @@ select option { background: #0f172a; }
 .countdown-sub { color: var(--ink-dim); }
 .countdown-digits { display: flex; justify-content: center; gap: 0.8rem; flex-wrap: wrap; }
 .countdown-unit {
+  --glow: var(--accent);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: rgba(2, 6, 23, 0.4); border: 1px solid var(--glass-border);
   border-radius: 16px; padding: 0.8rem 1rem; min-width: 5.2rem;
+  animation: countdownGlowBox 2.2s ease-in-out infinite;
 }
-.countdown-unit span { font-size: 2.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.countdown-unit span {
+  font-size: 2.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;
+  color: #fff;
+  animation: countdownGlowText 2.2s ease-in-out infinite;
+}
 .countdown-unit small { color: var(--ink-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.3rem; }
-.countdown-during .countdown-unit { border-color: rgba(74, 222, 128, 0.4); background: rgba(74, 222, 128, 0.1); }
+.countdown-during .countdown-unit { --glow: #4ade80; border-color: rgba(74, 222, 128, 0.4); background: rgba(74, 222, 128, 0.1); }
 .countdown-ended { padding: 1.4rem; }
+
+@keyframes countdownGlowText {
+  0%, 100% { text-shadow: 0 0 6px var(--glow), 0 0 14px transparent; }
+  50% { text-shadow: 0 0 16px var(--glow), 0 0 34px var(--glow); }
+}
+@keyframes countdownGlowBox {
+  0%, 100% { box-shadow: 0 0 6px -2px var(--glow); border-color: var(--glass-border); }
+  50% { box-shadow: 0 0 22px 2px var(--glow); border-color: var(--glow); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .countdown-unit, .countdown-unit span { animation: none; }
+}
 
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.8rem; }
 .stat-card { padding: 1rem; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
