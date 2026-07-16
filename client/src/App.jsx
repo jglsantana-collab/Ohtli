@@ -6,6 +6,7 @@ import TripList from './components/TripList.jsx';
 import TripView from './components/TripView.jsx';
 import AdminPanel from './components/AdminPanel.jsx';
 import MapsKeyModal from './components/MapsKeyModal.jsx';
+import HamburgerMenu from './components/HamburgerMenu.jsx';
 import { getMapsKey } from './maps.js';
 
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
   const [activeTripId, setActiveTripId] = useState(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [mapsReady, setMapsReady] = useState(!!getMapsKey());
 
   useEffect(() => {
@@ -62,14 +64,10 @@ export default function App() {
                   🔑 Configurar Google Maps
                 </button>
               )}
-              {user.is_admin && (
-                <button className="btn btn-ghost btn-sm" onClick={() => { setShowAdmin(true); setActiveTripId(null); }} title="Administración">
-                  👑 Admin
-                </button>
-              )}
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowKeyModal(true)} title="Configuración">⚙️</button>
-              <span className="user-chip" title={user.email}>👤 {user.name}</span>
-              <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Salir</button>
+              <button className="hamburger-btn" onClick={() => setShowMenu(true)} title="Menú" aria-label="Abrir menú">
+                ☰
+                {!mapsReady && <span className="ping-dot" />}
+              </button>
             </div>
           </header>
 
@@ -93,6 +91,19 @@ export default function App() {
 
       {showKeyModal && (
         <MapsKeyModal onClose={() => setShowKeyModal(false)} onSaved={handleKeySaved} />
+      )}
+
+      {user && showMenu && (
+        <HamburgerMenu
+          user={user}
+          view={showAdmin ? 'admin' : 'trips'}
+          mapsReady={mapsReady}
+          onGoTrips={() => { setShowAdmin(false); setActiveTripId(null); }}
+          onOpenAdmin={() => { setShowAdmin(true); setActiveTripId(null); }}
+          onOpenSettings={() => setShowKeyModal(true)}
+          onLogout={handleLogout}
+          onClose={() => setShowMenu(false)}
+        />
       )}
     </>
   );
