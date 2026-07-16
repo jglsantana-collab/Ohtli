@@ -32,7 +32,7 @@ const CATEGORIES = ['restaurante', 'turistico', 'playa', 'cafe', 'bar', 'compras
 // ---------- Helpers ----------
 
 function publicUser(u) {
-  return { id: u.id, name: u.name, email: u.email };
+  return { id: u.id, name: u.name, email: u.email, is_admin: u.is_admin };
 }
 
 function signToken(user) {
@@ -52,6 +52,11 @@ async function auth(req, res, next) {
   } catch {
     return res.status(401).json({ error: 'Sesión inválida o expirada' });
   }
+}
+
+function adminOnly(req, res, next) {
+  if (!req.user.is_admin) return res.status(403).json({ error: 'Solo un administrador puede hacer esto' });
+  next();
 }
 
 async function getTripForMember(tripId, userId) {
@@ -272,6 +277,54 @@ app.delete('/api/places/:id', auth, asyncRoute(async (req, res) => {
     return res.status(404).json({ error: 'Lugar no encontrado' });
   }
   await sql`DELETE FROM places WHERE id = ${place.id}`;
+  res.json({ ok: true });
+}));
+
+// ---------- Administración ----------
+
+app.get('/api/admin/users', auth, adminOnly, asyncRoute(async (req, res) => {
+  const users = await sql`
+    SELECT u.id, u.name, u.email, u.is_admin, u.created_at,
+      (SELECT COUNT(*) FROM trips t WHERE t.owner_id = u.id) AS trips_owned
+    FROM users u
+    ORDER BY u.created_at
+  `;
+  res.json({ users });
+}));
+
+app.put('/api/admin/users/:id/password', auth, adminOnly, asyncRoute(async (req, res) => {
+  const { password } = req.body || {};
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+  const hash = bcrypt.hashSync(password, 10);
+  const [updated] = await sql`
+    UPDATE users SET password_hash = ${hash} WHERE id = ${req.params.id} RETURNING id
+  `;
+  if (!updated) return res.status(404).json({ error: 'Usuario no encontrado' });
+  res.json({ ok: true });
+}));
+
+app.put('/api/admin/users/:id/role', auth, adminOnly, asyncRoute(async (req, res) => {
+  const targetId = Number(req.params.id);
+  const { is_admin } = req.body || {};
+  if (targetId === req.user.id && !is_admin) {
+    return res.status(400).json({ error: 'No puedes quitarte a ti mismo el rol de administrador' });
+  }
+  const [updated] = await sql`
+    UPDATE users SET is_admin = ${!!is_admin} WHERE id = ${targetId} RETURNING id, name, email, is_admin, created_at
+  `;
+  if (!updated) return res.status(404).json({ error: 'Usuario no encontrado' });
+  res.json({ user: updated });
+}));
+
+app.delete('/api/admin/users/:id', auth, adminOnly, asyncRoute(async (req, res) => {
+  const targetId = Number(req.params.id);
+  if (targetId === req.user.id) {
+    return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta desde aquí' });
+  }
+  const [deleted] = await sql`DELETE FROM users WHERE id = ${targetId} RETURNING id`;
+  if (!deleted) return res.status(404).json({ error: 'Usuario no encontrado' });
   res.json({ ok: true });
 }));
 

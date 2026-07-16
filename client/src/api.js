@@ -40,5 +40,12 @@ export const api = {
   addPlace: (tripId, body) =>
     request(`/api/trips/${tripId}/places`, { method: 'POST', body: JSON.stringify(body) }),
   updatePlace: (id, body) => request(`/api/places/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deletePlace: (id) => request(`/api/places/${id}`, { method: 'DELETE' })
+  deletePlace: (id) => request(`/api/places/${id}`, { method: 'DELETE' }),
+
+  adminUsers: () => request('/api/admin/users'),
+  adminSetPassword: (id, password) =>
+    request(`/api/admin/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
+  adminSetRole: (id, is_admin) =>
+    request(`/api/admin/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ is_admin }) }),
+  adminDeleteUser: (id) => request(`/api/admin/users/${id}`, { method: 'DELETE' })
 };
