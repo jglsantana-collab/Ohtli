@@ -6,6 +6,7 @@ export default function AuthScreen({ onLogin }) {
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -59,7 +60,26 @@ export default function AuthScreen({ onLogin }) {
           </label>
           <label>
             Contraseña
-            <input type="password" value={form.password} onChange={set('password')} placeholder={mode === 'register' ? 'Mínimo 6 caracteres' : '••••••••'} required minLength={6} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
+            <div className="password-field">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={form.password}
+                onChange={set('password')}
+                placeholder={mode === 'register' ? 'Mínimo 6 caracteres' : '••••••••'}
+                required
+                minLength={6}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                tabIndex={-1}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </label>
 
           {error && <div className="form-error">⚠️ {error}</div>}
