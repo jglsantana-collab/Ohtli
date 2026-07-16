@@ -63,6 +63,7 @@ export default function MapView({ trip, mapsReady, onNeedKey }) {
           marker.addListener('click', () => {
             infoRef.current.setContent(`
               <div class="map-info">
+                ${p.photo_url ? `<img class="map-info-photo" src="${escapeHtml(p.photo_url)}" alt="" />` : ''}
                 <strong>${cat.emoji} ${escapeHtml(p.name)}</strong><br/>
                 ${p.address ? `<small>${escapeHtml(p.address)}</small><br/>` : ''}
                 ${p.planned_date ? `📅 ${p.planned_date}<br/>` : ''}

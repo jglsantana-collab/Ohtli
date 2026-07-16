@@ -7,6 +7,7 @@ import MapView from './MapView.jsx';
 import ShareView from './ShareView.jsx';
 import DashboardView from './DashboardView.jsx';
 import DocumentsPanel from './DocumentsPanel.jsx';
+import { TRIP_THEMES, themeById } from '../themes.js';
 
 const TABS = [
   { id: 'resumen', label: '🧭 Resumen' },
@@ -28,6 +29,8 @@ export default function TripView({ tripId, user, mapsReady, onBack, onNeedKey, o
   const [error, setError] = useState('');
   const [tab, setTab] = useState('resumen');
   const [showSearch, setShowSearch] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
+  const [savingTheme, setSavingTheme] = useState(false);
 
   const reload = useCallback(() => {
     api.trip(tripId)
@@ -57,6 +60,21 @@ export default function TripView({ tripId, user, mapsReady, onBack, onNeedKey, o
 
   if (!trip) return <div className="center-block"><div className="spinner" /></div>;
 
+  async function changeTheme(themeId) {
+    if (themeId === trip.theme) { setShowThemePicker(false); return; }
+    setSavingTheme(true);
+    try {
+      const { trip: updated } = await api.updateTrip(trip.id, { theme: themeId });
+      setTrip(updated);
+      onThemeChange?.(updated.theme || 'default');
+      setShowThemePicker(false);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSavingTheme(false);
+    }
+  }
+
   return (
     <div className="page page-trip">
       <div className="trip-head">
@@ -70,6 +88,33 @@ export default function TripView({ tripId, user, mapsReady, onBack, onNeedKey, o
             )}
             {' '}· 👥 {trip.members.length} {trip.members.length === 1 ? 'persona' : 'personas'}
           </p>
+        </div>
+        <div className="trip-theme-control">
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setShowThemePicker((v) => !v)}
+            title="Cambiar temática del viaje"
+          >
+            {themeById(trip.theme).emoji} Temática
+          </button>
+          {showThemePicker && (
+            <div className="theme-picker-popover glass">
+              <div className="theme-picker">
+                {TRIP_THEMES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={savingTheme}
+                    className={`theme-chip${(trip.theme || 'default') === t.id ? ' active' : ''}`}
+                    title={t.desc}
+                    onClick={() => changeTheme(t.id)}
+                  >
+                    {t.emoji} {t.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <button className="btn btn-primary" onClick={() => setShowSearch(true)}>＋ Agregar lugar</button>
       </div>

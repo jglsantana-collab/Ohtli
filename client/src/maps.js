@@ -37,6 +37,28 @@ export function loadGoogleMaps() {
   return loaderPromise;
 }
 
+// Foto pequeña de un lugar (de la API nueva o la clásica) — ambas exponen
+// un método sync/async que regresa una URL ya lista para usar en <img>.
+async function firstPhotoUrl(photos, { maxWidth = 320, maxHeight = 240 } = {}) {
+  const photo = photos?.[0];
+  if (!photo) return null;
+  try {
+    if (typeof photo.getURI === 'function') return await photo.getURI({ maxWidth, maxHeight });
+    if (typeof photo.getUrl === 'function') return photo.getUrl({ maxWidth, maxHeight });
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+// Miniatura de mapa estática (Maps Static API) centrada en un punto.
+export function staticMapUrl(lat, lng, { width = 160, height = 120, zoom = 15 } = {}) {
+  const key = getMapsKey();
+  if (!key || lat == null || lng == null) return null;
+  const size = `${width}x${height}`;
+  return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${size}&scale=2&markers=color:0x38bdf8%7C${lat},${lng}&key=${encodeURIComponent(key)}`;
+}
+
 // Busca lugares con la Places API nueva y, si no está habilitada, con la clásica.
 export async function searchPlaces(query, center, radiusMeters = 20000) {
   const maps = await loadGoogleMaps();
@@ -47,20 +69,21 @@ export async function searchPlaces(query, center, radiusMeters = 20000) {
     if (Place?.searchByText) {
       const { places } = await Place.searchByText({
         textQuery: query,
-        fields: ['id', 'displayName', 'formattedAddress', 'location', 'rating', 'types'],
+        fields: ['id', 'displayName', 'formattedAddress', 'location', 'rating', 'types', 'photos'],
         locationBias: { center, radius: radiusMeters },
         language: 'es',
         maxResultCount: 12
       });
-      return (places || []).map((p) => ({
+      return Promise.all((places || []).map(async (p) => ({
         place_id: p.id,
         name: p.displayName,
         address: p.formattedAddress || '',
         lat: p.location?.lat(),
         lng: p.location?.lng(),
         rating: p.rating ?? null,
-        types: p.types || []
-      }));
+        types: p.types || [],
+        photo_url: await firstPhotoUrl(p.photos)
+      })));
     }
   } catch (err) {
     console.warn('Places API (nueva) no disponible, probando la clásica…', err);
@@ -71,17 +94,18 @@ export async function searchPlaces(query, center, radiusMeters = 20000) {
     const service = new maps.places.PlacesService(document.createElement('div'));
     service.textSearch(
       { query, location: new maps.LatLng(center.lat, center.lng), radius: radiusMeters },
-      (results, status) => {
+      async (results, status) => {
         if (status === maps.places.PlacesServiceStatus.OK && results) {
-          resolve(results.slice(0, 12).map((r) => ({
+          resolve(await Promise.all(results.slice(0, 12).map(async (r) => ({
             place_id: r.place_id,
             name: r.name,
             address: r.formatted_address || '',
             lat: r.geometry?.location?.lat(),
             lng: r.geometry?.location?.lng(),
             rating: r.rating ?? null,
-            types: r.types || []
-          })));
+            types: r.types || [],
+            photo_url: await firstPhotoUrl(r.photos)
+          }))));
         } else if (status === maps.places.PlacesServiceStatus.ZERO_RESULTS) {
           resolve([]);
         } else {

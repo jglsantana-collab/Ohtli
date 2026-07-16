@@ -65,6 +65,7 @@ export async function initSchema() {
       sort_order INTEGER NOT NULL DEFAULT 0,
       checkin_date TEXT,
       checkout_date TEXT,
+      photo_url TEXT,
       notes TEXT,
       added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -74,6 +75,7 @@ export async function initSchema() {
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS checkin_date TEXT`;
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS checkout_date TEXT`;
+  await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS photo_url TEXT`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS flights (

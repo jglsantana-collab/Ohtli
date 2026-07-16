@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../api.js';
-import { searchPlaces, getMapsKey } from '../maps.js';
+import { searchPlaces, getMapsKey, staticMapUrl } from '../maps.js';
 import { CATEGORIES, categoryById, guessCategory } from '../categories.js';
 
 // Modal para buscar lugares en Google y ligarlos al viaje,
@@ -42,7 +42,8 @@ export default function PlaceSearch({ trip, mapsReady, onNeedKey, onClose, onAdd
         address: r.address,
         lat: r.lat,
         lng: r.lng,
-        rating: r.rating ?? undefined
+        rating: r.rating ?? undefined,
+        photo_url: r.photo_url ?? undefined
       });
       setAddedIds((s) => new Set([...s, r.place_id]));
       onAdded();
@@ -210,9 +211,12 @@ export default function PlaceSearch({ trip, mapsReady, onNeedKey, onClose, onAdd
 function SearchResult({ result, suggested, added, busy, onAdd }) {
   const [category, setCategory] = useState(suggested);
   const cat = categoryById(category);
+  const mapThumb = staticMapUrl(result.lat, result.lng, { width: 100, height: 100, zoom: 15 });
 
   return (
     <li className={`search-result ${added ? 'added' : ''}`}>
+      {result.photo_url && <img className="sr-photo" src={result.photo_url} alt="" loading="lazy" />}
+      {mapThumb && <img className="sr-mapthumb" src={mapThumb} alt="Mapa" loading="lazy" />}
       <div className="sr-info">
         <div className="sr-name">
           <span className="sr-emoji">{cat.emoji}</span> {result.name}
