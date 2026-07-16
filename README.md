@@ -15,22 +15,35 @@
 
 ## 🚀 Cómo correrla en local
 
-Requisitos: Node.js 18+.
+Requisitos: Node.js 18+ y una base de datos Postgres (ej. una gratuita en [Neon](https://neon.tech)).
 
 ```bash
 cd ohtli
 npm install          # instala "concurrently" (raíz)
 npm run setup        # instala dependencias de server/ y client/
+```
+
+Crea `server/.env` a partir de `server/.env.example` con tu `DATABASE_URL` de Postgres y un `JWT_SECRET` propio.
+
+```bash
 npm run dev          # levanta API (http://localhost:4000) y web (http://localhost:5173)
 ```
 
-Abre **http://localhost:5173**, crea tu cuenta y tu primer viaje (Mazatlán viene sugerido).
+Abre **http://localhost:5173**, crea tu cuenta y tu primer viaje (Mazatlán viene sugerido). Las tablas se crean solas la primera vez que la API recibe una petición.
 
 ### Modo producción (un solo servidor)
 
 ```bash
 npm run start        # compila el frontend y lo sirve desde la API en http://localhost:4000
 ```
+
+## ☁️ Despliegue en Vercel
+
+El proyecto ya está configurado para desplegarse completo (frontend + API) en un solo proyecto de Vercel:
+
+1. Crea una base de datos Postgres, por ejemplo con la [integración de Neon en Vercel](https://vercel.com/marketplace/neon) (Storage → Create Database → Neon). Esto agrega automáticamente la variable `DATABASE_URL` al proyecto.
+2. En **Project Settings → Environment Variables**, agrega `JWT_SECRET` con un valor aleatorio propio (por ejemplo generado con `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`).
+3. Vuelve a desplegar (Deployments → ⋯ → Redeploy). `vercel.json` en la raíz ya define el build del frontend (`client/`) y enruta `/api/*` hacia la función serverless en `api/index.js`, que reutiliza el mismo Express de `server/app.js`.
 
 ## 🔑 Clave de Google Maps
 
@@ -47,10 +60,13 @@ Sin clave, la app sigue funcionando: puedes agregar lugares manualmente, usar el
 
 ```
 ohtli/
-├── server/          # API Express + SQLite (better-sqlite3)
-│   ├── index.js     # rutas: auth, viajes, lugares, miembros
-│   ├── db.js        # esquema de base de datos
-│   └── data/        # ohtli.db (se crea sola; ignorada por git)
+├── api/
+│   └── index.js     # entrypoint de la función serverless de Vercel (reexporta server/app.js)
+├── server/          # API Express + Postgres (@neondatabase/serverless)
+│   ├── app.js        # la app de Express: rutas de auth, viajes, lugares, miembros
+│   ├── index.js       # entrypoint solo para desarrollo local (app.listen)
+│   └── db.js          # conexión y esquema de la base de datos
+├── vercel.json      # build del frontend + rewrite de /api/* hacia api/index.js
 └── client/          # React + Vite
     └── src/
         ├── components/   # pantallas y vistas (lista, calendario, mapa…)
@@ -60,4 +76,4 @@ ohtli/
 
 - La sesión se guarda como JWT en `localStorage` (30 días).
 - Los viajes se comparten agregando miembros por correo; cada miembro ve el viaje en su lista y la vista se refresca sola cada 20 segundos.
-- La base de datos es un archivo SQLite en `server/data/ohtli.db` — respáldalo si quieres conservar tus planes.
+- La base de datos es Postgres; la conexión se toma de `DATABASE_URL` y las tablas se crean solas en el primer request.

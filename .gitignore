@@ -5,7 +5,4 @@ node_modules/
 dist/
 build/
 *.log
-server/data/.jwt-secret
-server/data/*.db
-server/data/*.db-shm
-server/data/*.db-wal
+server/data/

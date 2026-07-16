@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Ohtli — planificador de viajes interactivo y colaborativo",
   "private": true,
+  "type": "module",
   "scripts": {
     "setup": "npm install --prefix server && npm install --prefix client",
     "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
