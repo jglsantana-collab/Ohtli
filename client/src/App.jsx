@@ -17,6 +17,7 @@ export default function App() {
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [mapsReady, setMapsReady] = useState(!!getMapsKey());
+  const [tripTheme, setTripTheme] = useState('default');
 
   useEffect(() => {
     if (!getToken()) { setChecking(false); return; }
@@ -48,7 +49,7 @@ export default function App() {
 
   return (
     <>
-      <Background />
+      <Background theme={activeTripId ? tripTheme : 'default'} />
       {!user ? (
         <AuthScreen onLogin={setUser} />
       ) : (
@@ -81,9 +82,13 @@ export default function App() {
                 mapsReady={mapsReady}
                 onBack={() => setActiveTripId(null)}
                 onNeedKey={() => setShowKeyModal(true)}
+                onThemeChange={setTripTheme}
               />
             ) : (
-              <TripList user={user} onOpenTrip={setActiveTripId} />
+              <TripList
+                user={user}
+                onOpenTrip={(id, theme) => { setTripTheme(theme || 'default'); setActiveTripId(id); }}
+              />
             )}
           </main>
         </div>

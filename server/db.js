@@ -33,10 +33,12 @@ export async function initSchema() {
       lng DOUBLE PRECISION NOT NULL,
       start_date TEXT,
       end_date TEXT,
+      theme TEXT NOT NULL DEFAULT 'default',
       owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE trips ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'default'`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS trip_members (
@@ -88,6 +90,30 @@ export async function initSchema() {
       arrival_time TEXT,
       notes TEXT,
       added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS documents (
+      id SERIAL PRIMARY KEY,
+      trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      doc_type TEXT NOT NULL DEFAULT 'otro',
+      url TEXT,
+      notes TEXT,
+      added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;

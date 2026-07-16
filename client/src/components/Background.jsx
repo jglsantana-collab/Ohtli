@@ -1,8 +1,14 @@
 import React from 'react';
+import { BeachScene, CityScene, MountainScene } from './themes/Scenes.jsx';
 
-// Fondo dinámico: gradiente animado + "blobs" flotantes + estrellas sutiles.
-// El tono cambia según la hora del día.
-export default function Background() {
+// Fondo dinámico. Con theme='default' muestra el gradiente animado de siempre
+// (el tono cambia según la hora del día); las demás temáticas muestran
+// escenas animadas con eventos aleatorios.
+export default function Background({ theme = 'default' }) {
+  if (theme === 'playa') return <BeachScene />;
+  if (theme === 'ciudad') return <CityScene />;
+  if (theme === 'montana') return <MountainScene />;
+
   const hour = new Date().getHours();
   const phase = hour >= 6 && hour < 12 ? 'morning' : hour >= 12 && hour < 19 ? 'day' : 'night';
 

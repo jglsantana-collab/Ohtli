@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { categoryById } from '../categories.js';
+import { weatherEmoji } from '../weather.js';
 
 const WEEKDAYS_LONG = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -32,8 +33,23 @@ export default function CalendarView({ trip, onChanged }) {
   const [dragOverDay, setDragOverDay] = useState(null);
   const [savingDates, setSavingDates] = useState(false);
   const [dateForm, setDateForm] = useState({ start_date: trip.start_date || '', end_date: trip.end_date || '' });
+  const [weatherByDate, setWeatherByDate] = useState({});
 
   const days = useMemo(() => buildDayRange(trip.start_date, trip.end_date), [trip.start_date, trip.end_date]);
+
+  useEffect(() => {
+    if (!trip.start_date || !trip.end_date) return;
+    let cancelled = false;
+    api.tripWeather(trip.id)
+      .then((d) => {
+        if (cancelled) return;
+        const map = {};
+        for (const w of d.days) map[w.date] = w;
+        setWeatherByDate(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [trip.id, trip.start_date, trip.end_date]);
 
   const schedulable = trip.places.filter((p) => p.category !== 'hotel');
   const hotels = trip.places.filter((p) => p.category === 'hotel' && p.checkin_date && p.checkout_date);
@@ -237,6 +253,12 @@ export default function CalendarView({ trip, onChanged }) {
                   <h3>{WEEKDAYS_LONG[day.getDay()]}</h3>
                   <p className="muted">{day.getDate()} {MONTHS_SHORT[day.getMonth()]}</p>
                 </div>
+                {weatherByDate[iso] && (
+                  <div className="day-weather" title={`Máx ${weatherByDate[iso].tmax}° · Mín ${weatherByDate[iso].tmin}°`}>
+                    <span className="day-weather-emoji">{weatherEmoji(weatherByDate[iso].code)}</span>
+                    <span>{weatherByDate[iso].tmax}° / {weatherByDate[iso].tmin}°</span>
+                  </div>
+                )}
               </div>
 
               {(hotelsByDate[iso] || []).map((h) => (

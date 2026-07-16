@@ -6,12 +6,14 @@ import CalendarView from './CalendarView.jsx';
 import MapView from './MapView.jsx';
 import ShareView from './ShareView.jsx';
 import DashboardView from './DashboardView.jsx';
+import DocumentsPanel from './DocumentsPanel.jsx';
 
 const TABS = [
   { id: 'resumen', label: '🧭 Resumen' },
   { id: 'lugares', label: '📋 Lugares' },
   { id: 'calendario', label: '📅 Calendario' },
   { id: 'mapa', label: '🗺️ Mapa' },
+  { id: 'documentos', label: '📁 Documentos' },
   { id: 'compartir', label: '👥 Compartir' }
 ];
 
@@ -21,7 +23,7 @@ function fmtDate(d) {
   return new Date(y, m - 1, day).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export default function TripView({ tripId, user, mapsReady, onBack, onNeedKey }) {
+export default function TripView({ tripId, user, mapsReady, onBack, onNeedKey, onThemeChange }) {
   const [trip, setTrip] = useState(null);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('resumen');
@@ -29,9 +31,12 @@ export default function TripView({ tripId, user, mapsReady, onBack, onNeedKey })
 
   const reload = useCallback(() => {
     api.trip(tripId)
-      .then((d) => setTrip(d.trip))
+      .then((d) => {
+        setTrip(d.trip);
+        onThemeChange?.(d.trip.theme || 'default');
+      })
       .catch((e) => setError(e.message));
-  }, [tripId]);
+  }, [tripId, onThemeChange]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -88,6 +93,9 @@ export default function TripView({ tripId, user, mapsReady, onBack, onNeedKey })
       )}
       {tab === 'mapa' && (
         <MapView trip={trip} mapsReady={mapsReady} onNeedKey={onNeedKey} />
+      )}
+      {tab === 'documentos' && (
+        <DocumentsPanel trip={trip} onChanged={reload} />
       )}
       {tab === 'compartir' && (
         <ShareView trip={trip} user={user} onChanged={reload} />

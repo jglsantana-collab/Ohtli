@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { geocodeCity, getMapsKey } from '../maps.js';
+import { TRIP_THEMES, themeById } from '../themes.js';
 
 // Ciudades sugeridas con coordenadas (funcionan sin clave de Google)
 const CITY_PRESETS = [
@@ -25,7 +26,8 @@ export default function TripList({ user, onOpenTrip }) {
     name: 'Viaje a Mazatlán',
     city: CITY_PRESETS[0].name,
     start_date: '',
-    end_date: ''
+    end_date: '',
+    theme: 'playa'
   });
   const [customCity, setCustomCity] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -53,11 +55,12 @@ export default function TripList({ user, onOpenTrip }) {
         lat: coords.lat,
         lng: coords.lng,
         start_date: form.start_date || null,
-        end_date: form.end_date || null
+        end_date: form.end_date || null,
+        theme: form.theme
       });
       setTrips((t) => [trip, ...(t || [])]);
       setShowForm(false);
-      onOpenTrip(trip.id);
+      onOpenTrip(trip.id, trip.theme);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -123,6 +126,22 @@ export default function TripList({ user, onOpenTrip }) {
               </select>
             )}
           </label>
+          <label>
+            Temática del viaje
+            <div className="theme-picker">
+              {TRIP_THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`theme-chip${form.theme === t.id ? ' active' : ''}`}
+                  title={t.desc}
+                  onClick={() => setForm((f) => ({ ...f, theme: t.id }))}
+                >
+                  {t.emoji} {t.name}
+                </button>
+              ))}
+            </div>
+          </label>
           <div className="form-row">
             <label>
               Fecha de inicio
@@ -151,9 +170,16 @@ export default function TripList({ user, onOpenTrip }) {
       ) : (
         <div className="trip-grid">
           {trips.map((trip) => (
-            <div key={trip.id} className="trip-card glass" onClick={() => onOpenTrip(trip.id)}>
+            <div key={trip.id} className="trip-card glass" onClick={() => onOpenTrip(trip.id, trip.theme)}>
               <div className="trip-card-head">
-                <h3>{trip.name}</h3>
+                <h3>
+                  {trip.name}
+                  {trip.theme && trip.theme !== 'default' && (
+                    <span className="trip-theme-chip" title={`Temática: ${themeById(trip.theme).name}`}>
+                      {themeById(trip.theme).emoji}
+                    </span>
+                  )}
+                </h3>
                 {trip.owner_id === user.id && (
                   <button
                     className="btn-icon"

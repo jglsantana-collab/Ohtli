@@ -49,6 +49,18 @@ export const api = {
   lookupFlight: (flightNumber) =>
     request(`/api/flights/lookup?flight_number=${encodeURIComponent(flightNumber)}`),
 
+  addDocument: (tripId, body) =>
+    request(`/api/trips/${tripId}/documents`, { method: 'POST', body: JSON.stringify(body) }),
+  updateDocument: (id, body) => request(`/api/documents/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteDocument: (id) => request(`/api/documents/${id}`, { method: 'DELETE' }),
+
+  tripWeather: (tripId) => request(`/api/trips/${tripId}/weather`),
+
+  pushPublicKey: () => request('/api/push/public-key'),
+  pushSubscribe: (subscription) => request('/api/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
+  pushUnsubscribe: (endpoint) => request('/api/push/subscribe', { method: 'DELETE', body: JSON.stringify({ endpoint }) }),
+  pushTest: () => request('/api/push/test', { method: 'POST' }),
+
   adminUsers: () => request('/api/admin/users'),
   adminSetPassword: (id, password) =>
     request(`/api/admin/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),

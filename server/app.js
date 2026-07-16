@@ -6,6 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { sql, ensureSchema } from './db.js';
+import { pushConfigured, sendPushToUser } from './push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,7 @@ app.use(async (_req, res, next) => {
 });
 
 const CATEGORIES = ['restaurante', 'turistico', 'playa', 'cafe', 'bar', 'compras', 'hotel', 'naturaleza', 'otro'];
+const DOC_TYPES = ['pasaporte', 'seguro', 'reservacion', 'visa', 'otro'];
 
 // ---------- Helpers ----------
 
@@ -87,7 +89,14 @@ async function tripWithDetails(trip) {
     ORDER BY departure_date IS NULL, departure_date, departure_time IS NULL, departure_time, created_at
   `;
 
-  return { ...trip, members, places, flights };
+  const documents = await sql`
+    SELECT d.*, u.name AS added_by_name
+    FROM documents d LEFT JOIN users u ON u.id = d.added_by
+    WHERE d.trip_id = ${trip.id}
+    ORDER BY d.created_at
+  `;
+
+  return { ...trip, members, places, flights, documents };
 }
 
 function asyncRoute(handler) {
@@ -148,15 +157,18 @@ app.get('/api/trips', auth, asyncRoute(async (req, res) => {
   res.json({ trips });
 }));
 
+const TRIP_THEMES = ['default', 'playa', 'ciudad', 'montana'];
+
 app.post('/api/trips', auth, asyncRoute(async (req, res) => {
-  const { name, city, lat, lng, start_date, end_date } = req.body || {};
+  const { name, city, lat, lng, start_date, end_date, theme } = req.body || {};
   if (!name || !city || typeof lat !== 'number' || typeof lng !== 'number') {
     return res.status(400).json({ error: 'Nombre, ciudad y coordenadas son obligatorios' });
   }
+  const safeTheme = TRIP_THEMES.includes(theme) ? theme : 'default';
   const [trip] = await sql`
     WITH new_trip AS (
-      INSERT INTO trips (name, city, lat, lng, start_date, end_date, owner_id)
-      VALUES (${name.trim()}, ${city.trim()}, ${lat}, ${lng}, ${start_date || null}, ${end_date || null}, ${req.user.id})
+      INSERT INTO trips (name, city, lat, lng, start_date, end_date, theme, owner_id)
+      VALUES (${name.trim()}, ${city.trim()}, ${lat}, ${lng}, ${start_date || null}, ${end_date || null}, ${safeTheme}, ${req.user.id})
       RETURNING *
     ), member AS (
       INSERT INTO trip_members (trip_id, user_id)
@@ -176,13 +188,15 @@ app.get('/api/trips/:id', auth, asyncRoute(async (req, res) => {
 app.put('/api/trips/:id', auth, asyncRoute(async (req, res) => {
   const trip = await getTripForMember(req.params.id, req.user.id);
   if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
-  const { name, city, lat, lng, start_date, end_date } = req.body || {};
+  const { name, city, lat, lng, start_date, end_date, theme } = req.body || {};
+  const safeTheme = TRIP_THEMES.includes(theme) ? theme : null;
   const [updated] = await sql`
     UPDATE trips SET
       name = COALESCE(${name ?? null}, name),
       city = COALESCE(${city ?? null}, city),
       lat = COALESCE(${lat ?? null}, lat),
       lng = COALESCE(${lng ?? null}, lng),
+      theme = COALESCE(${safeTheme}, theme),
       start_date = ${start_date !== undefined ? start_date : trip.start_date},
       end_date = ${end_date !== undefined ? end_date : trip.end_date}
     WHERE id = ${trip.id}
@@ -381,6 +395,134 @@ app.delete('/api/flights/:id', auth, asyncRoute(async (req, res) => {
   }
   await sql`DELETE FROM flights WHERE id = ${flight.id}`;
   res.json({ ok: true });
+}));
+
+// ---------- Clima ----------
+
+app.get('/api/trips/:id/weather', auth, asyncRoute(async (req, res) => {
+  const trip = await getTripForMember(req.params.id, req.user.id);
+  if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
+
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${trip.lat}&longitude=${trip.lng}&daily=weathercode,temperature_2m_max,temperature_2m_min&forecast_days=16&timezone=auto`;
+  const apiRes = await fetch(url);
+  if (!apiRes.ok) return res.status(502).json({ error: 'No se pudo consultar el clima' });
+  const data = await apiRes.json();
+  const daily = data?.daily;
+  if (!daily?.time) return res.json({ days: [] });
+
+  const days = daily.time.map((date, i) => ({
+    date,
+    code: daily.weathercode[i],
+    tmax: Math.round(daily.temperature_2m_max[i]),
+    tmin: Math.round(daily.temperature_2m_min[i])
+  })).filter((d) => (!trip.start_date || d.date >= trip.start_date) && (!trip.end_date || d.date <= trip.end_date));
+
+  res.json({ days });
+}));
+
+// ---------- Documentos ----------
+
+app.post('/api/trips/:id/documents', auth, asyncRoute(async (req, res) => {
+  const trip = await getTripForMember(req.params.id, req.user.id);
+  if (!trip) return res.status(404).json({ error: 'Viaje no encontrado' });
+  const { name, doc_type, url, notes } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'El nombre del documento es obligatorio' });
+  const type = DOC_TYPES.includes(doc_type) ? doc_type : 'otro';
+
+  const [doc] = await sql`
+    INSERT INTO documents (trip_id, name, doc_type, url, notes, added_by)
+    VALUES (${trip.id}, ${name.trim()}, ${type}, ${url || null}, ${notes || null}, ${req.user.id})
+    RETURNING *
+  `;
+  res.status(201).json({ document: doc });
+}));
+
+app.put('/api/documents/:id', auth, asyncRoute(async (req, res) => {
+  const [doc] = await sql`SELECT * FROM documents WHERE id = ${req.params.id}`;
+  if (!doc || !(await getTripForMember(doc.trip_id, req.user.id))) {
+    return res.status(404).json({ error: 'Documento no encontrado' });
+  }
+  const { name, doc_type, url, notes } = req.body || {};
+  const [updated] = await sql`
+    UPDATE documents SET
+      name = COALESCE(${name ?? null}, name),
+      doc_type = COALESCE(${doc_type && DOC_TYPES.includes(doc_type) ? doc_type : null}, doc_type),
+      url = ${url !== undefined ? url : doc.url},
+      notes = ${notes !== undefined ? notes : doc.notes}
+    WHERE id = ${doc.id}
+    RETURNING *
+  `;
+  res.json({ document: updated });
+}));
+
+app.delete('/api/documents/:id', auth, asyncRoute(async (req, res) => {
+  const [doc] = await sql`SELECT * FROM documents WHERE id = ${req.params.id}`;
+  if (!doc || !(await getTripForMember(doc.trip_id, req.user.id))) {
+    return res.status(404).json({ error: 'Documento no encontrado' });
+  }
+  await sql`DELETE FROM documents WHERE id = ${doc.id}`;
+  res.json({ ok: true });
+}));
+
+// ---------- Notificaciones push ----------
+
+app.get('/api/push/public-key', (_req, res) => {
+  if (!pushConfigured) return res.status(501).json({ error: 'Las notificaciones push no están configuradas' });
+  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/push/subscribe', auth, asyncRoute(async (req, res) => {
+  const { endpoint, keys } = req.body || {};
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    return res.status(400).json({ error: 'Suscripción inválida' });
+  }
+  await sql`
+    INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+    VALUES (${req.user.id}, ${endpoint}, ${keys.p256dh}, ${keys.auth})
+    ON CONFLICT (endpoint) DO UPDATE SET user_id = ${req.user.id}, p256dh = ${keys.p256dh}, auth = ${keys.auth}
+  `;
+  res.status(201).json({ ok: true });
+}));
+
+app.delete('/api/push/subscribe', auth, asyncRoute(async (req, res) => {
+  const { endpoint } = req.body || {};
+  if (!endpoint) return res.status(400).json({ error: 'Falta el endpoint' });
+  await sql`DELETE FROM push_subscriptions WHERE endpoint = ${endpoint} AND user_id = ${req.user.id}`;
+  res.json({ ok: true });
+}));
+
+app.post('/api/push/test', auth, asyncRoute(async (req, res) => {
+  await sendPushToUser(req.user.id, { title: 'Ohtli', body: '🔔 Así se ven tus notificaciones. ¡Buen viaje!' });
+  res.json({ ok: true });
+}));
+
+// Disparado a diario por Vercel Cron (ver vercel.json) para avisar
+// a los miembros de un viaje que empieza mañana.
+app.get('/api/cron/trip-reminders', asyncRoute(async (req, res) => {
+  if (process.env.CRON_SECRET) {
+    const auth = req.headers.authorization;
+    const ok = auth === `Bearer ${process.env.CRON_SECRET}` || req.query.secret === process.env.CRON_SECRET;
+    if (!ok) return res.status(401).json({ error: 'No autorizado' });
+  }
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const iso = tomorrow.toISOString().slice(0, 10);
+
+  const trips = await sql`SELECT * FROM trips WHERE start_date = ${iso}`;
+  let notified = 0;
+  for (const trip of trips) {
+    const members = await sql`SELECT user_id FROM trip_members WHERE trip_id = ${trip.id}`;
+    for (const m of members) {
+      await sendPushToUser(m.user_id, {
+        title: '🧳 ¡Tu viaje empieza mañana!',
+        body: `${trip.name} en ${trip.city.split(',')[0]} arranca mañana. ¿Todo listo?`,
+        url: '/'
+      });
+      notified++;
+    }
+  }
+  res.json({ trips: trips.length, notified });
 }));
 
 // ---------- Administración ----------

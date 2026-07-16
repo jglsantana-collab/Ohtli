@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { pushSupported, getPushSubscription, subscribeToPush, unsubscribeFromPush } from '../push.js';
 
 export default function HamburgerMenu({
   user,
@@ -11,10 +12,36 @@ export default function HamburgerMenu({
   onClose
 }) {
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState('');
+
+  useEffect(() => {
+    if (!pushSupported()) return;
+    getPushSubscription().then((sub) => setPushOn(!!sub)).catch(() => {});
+  }, []);
 
   function go(action) {
     action();
     onClose();
+  }
+
+  async function togglePush() {
+    setPushBusy(true);
+    setPushError('');
+    try {
+      if (pushOn) {
+        await unsubscribeFromPush();
+        setPushOn(false);
+      } else {
+        await subscribeToPush();
+        setPushOn(true);
+      }
+    } catch (err) {
+      setPushError(err.message);
+    } finally {
+      setPushBusy(false);
+    }
   }
 
   return (
@@ -56,6 +83,13 @@ export default function HamburgerMenu({
             ⚙️ <span>Configuración</span>
             {!mapsReady && <span className="warn-dot" title="Falta configurar Google Maps" />}
           </button>
+
+          {pushSupported() && (
+            <button className="menu-nav-item" onClick={togglePush} disabled={pushBusy}>
+              {pushOn ? '🔔' : '🔕'} <span>{pushBusy ? 'Un momento…' : pushOn ? 'Notificaciones activadas' : 'Activar notificaciones'}</span>
+            </button>
+          )}
+          {pushError && <p className="menu-push-error">{pushError}</p>}
         </nav>
 
         <div className="menu-footer">
