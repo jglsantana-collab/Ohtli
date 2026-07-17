@@ -138,6 +138,8 @@ a { color: var(--accent); }
 label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.9rem; font-weight: 600; }
 input, select, textarea {
   font: inherit; color: var(--ink);
+  /* iOS Safari hace zoom automático al enfocar campos con font-size < 16px */
+  font-size: 16px;
   background: rgba(2, 6, 23, 0.5);
   border: 1px solid var(--glass-border);
   border-radius: 10px; padding: 0.6rem 0.8rem;
@@ -445,7 +447,7 @@ select option { background: #0f172a; }
 .sr-emoji { font-size: 1.1rem; }
 .sr-address { color: var(--ink-dim); font-size: 0.82rem; margin-top: 0.15rem; }
 .sr-actions { display: flex; gap: 0.5rem; align-items: center; }
-.sr-actions select { font-size: 0.82rem; padding: 0.4rem 0.5rem; }
+.sr-actions select { font-size: 16px; padding: 0.4rem 0.5rem; }
 
 .manual-form { display: flex; flex-direction: column; gap: 0.8rem; }
 
@@ -494,7 +496,7 @@ select option { background: #0f172a; }
 .day-item.dragging { opacity: 0.4; }
 .day-item-handle { color: var(--ink-dim); font-size: 0.9rem; cursor: grab; }
 .day-item-time {
-  width: 5.4rem; flex-shrink: 0; padding: 0.3rem 0.4rem; font-size: 0.85rem;
+  width: 6.4rem; flex-shrink: 0; padding: 0.3rem 0.4rem; font-size: 16px;
   background: rgba(2, 6, 23, 0.5); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--ink);
 }
 .day-item-emoji { flex-shrink: 0; }
