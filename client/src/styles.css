@@ -13,7 +13,11 @@
   --radius: 16px;
 }
 
-html, body, #root { min-height: 100vh; }
+html, body, #root { min-height: 100vh; min-height: 100dvh; }
+
+html, body {
+  background: #0f172a;
+}
 
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
@@ -32,6 +36,7 @@ a { color: var(--accent); }
 
 .bg-dynamic {
   position: fixed; inset: 0; z-index: -2; overflow: hidden;
+  width: 100vw; height: 100vh; height: 100dvh;
   background-size: 300% 300%;
   animation: gradientShift 24s ease-in-out infinite;
 }
@@ -85,7 +90,10 @@ a { color: var(--accent); }
 }
 
 .center-screen {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem;
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 1rem) calc(env(safe-area-inset-right, 0px) + 1rem)
+           calc(env(safe-area-inset-bottom, 0px) + 1rem) calc(env(safe-area-inset-left, 0px) + 1rem);
 }
 .center-block { display: flex; justify-content: center; padding: 3rem; }
 
